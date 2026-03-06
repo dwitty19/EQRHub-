@@ -448,21 +448,20 @@ local function ApplyBredESP()
     end
 end
 
+local _bredESP_last = 0
+
 local function BredMakurz_Enable()
     if BredMakurz_Enabled then return end
     BredMakurz_Enabled = true
-    -- Run once immediately, then every 1 second (building billboards is expensive)
     ApplyBredESP()
     bredMakurzConn = RunService.Heartbeat:Connect(function()
         if not BredMakurz_Enabled then return end
-        -- Throttle to ~1 per second using a simple tick check
-        if not BredMakurz_Enable._last or (tick() - BredMakurz_Enable._last) >= 1 then
-            BredMakurz_Enable._last = tick()
+        if (tick() - _bredESP_last) >= 1 then
+            _bredESP_last = tick()
             ApplyBredESP()
         end
     end)
 end
-BredMakurz_Enable._last = 0
 
 local function BredMakurz_Disable()
     if not BredMakurz_Enabled then return end
