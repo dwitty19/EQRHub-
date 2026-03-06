@@ -1534,7 +1534,22 @@ end)
 --   █████  ██
 --  R A Y F I E L D
 -- ════════════════════════════════════════════════════════════
-local Rayfield = loadstring(game:HttpGet("https://sirius.menu/rayfield"))()
+-- ════════════════════════════════════════════════════════════
+--  R A Y F I E L D  (with fallback if primary CDN is down)
+-- ════════════════════════════════════════════════════════════
+local Rayfield
+local rayfieldURLs = {
+    "https://sirius.menu/rayfield",
+    "https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua",
+}
+for _, url in ipairs(rayfieldURLs) do
+    local ok, result = pcall(function()
+        return loadstring(game:HttpGet(url, true))()
+    end)
+    if ok and result then Rayfield = result; break end
+    task.wait(1)
+end
+assert(Rayfield, "[EQR Hub] Failed to load Rayfield UI from all sources. Check your internet / executor HTTP permissions.")
 
 local Window = Rayfield:CreateWindow({
     Name            = "EQR Hub  |  v2.1",
