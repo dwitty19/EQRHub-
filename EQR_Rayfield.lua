@@ -1566,19 +1566,9 @@ local Window = Rayfield:CreateWindow({
     LoadingTitle    = "EQR Hub  v2.1",
     LoadingSubtitle = "Criminality  •  Built for Dwitty19",
     ConfigurationSaving = { Enabled=true, FolderName="EQRHub", FileName="config" },
-    KeySystem = true,
-    KeySettings = {
-        Title    = "EQR Hub  v2.1",
-        Subtitle = "Enter your access key",
-        Note     = "Contact Dwitty19 for a key.",
-        FileName = "EQRHubKey",
-        SaveKey  = true,
-        GrabKeyFromSite = false,
-        Key      = {
-            "EQR-DWITTY-2025",
-        },
-    },
+    KeySystem = false,
 })
+assert(Window, "[EQR Hub] CreateWindow returned nil — Rayfield version mismatch or UI conflict.")
 
 -- ════════════════════════════════════════════════════════════
 --  🏠  HOME  (Dashboard + Quick Toggles)
