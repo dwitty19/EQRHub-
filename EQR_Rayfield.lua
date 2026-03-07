@@ -1566,9 +1566,41 @@ local Window = Rayfield:CreateWindow({
     LoadingTitle    = "EQR Hub  v2.1",
     LoadingSubtitle = "Criminality  •  Built for Dwitty19",
     ConfigurationSaving = { Enabled=true, FolderName="EQRHub", FileName="config" },
-    KeySystem = false,
+    KeySystem = false,  -- key check handled below
 })
-assert(Window, "[EQR Hub] CreateWindow returned nil — Rayfield version mismatch or UI conflict.")
+
+-- ── Manual key check (Rayfield's built-in KeySystem returns nil on Window) ──
+local VALID_KEYS = { ["EQR-DWITTY-2025"] = true }
+local keyFile = "EQRHubKey.txt"
+
+local function checkKey()
+    -- Check saved key first
+    if isfile and isfile(keyFile) then
+        local saved = readfile(keyFile)
+        if VALID_KEYS[saved] then return true end
+    end
+    -- Prompt via Rayfield input notification
+    local entered = nil
+    Rayfield:Prompt({
+        Title   = "🔑  EQR Hub  v2.1",
+        SubTitle = "Enter your access key",
+        Placeholder = "EQR-XXXXX-XXXX",
+        Callback = function(val) entered = val end,
+    })
+    -- Wait up to 60s for input
+    local t = 0
+    repeat task.wait(0.5); t = t + 0.5 until entered ~= nil or t >= 60
+    if entered and VALID_KEYS[entered] then
+        if writefile then writefile(keyFile, entered) end
+        return true
+    end
+    return false
+end
+
+if not checkKey() then
+    Rayfield:Notify({Title="❌ Invalid Key", Content="Wrong or missing key. Contact Dwitty19.", Duration=10, Image=4483362458})
+    error("[EQR Hub] Invalid key — aborting.")
+end
 
 -- ════════════════════════════════════════════════════════════
 --  🏠  HOME  (Dashboard + Quick Toggles)
