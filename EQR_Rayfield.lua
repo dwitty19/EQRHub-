@@ -1569,37 +1569,40 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false,  -- key check handled below
 })
 
--- ── Manual key check (Rayfield's built-in KeySystem returns nil on Window) ──
+-- ── Key check (best-effort — won't block load if prompt API unavailable) ──
 local VALID_KEYS = { ["EQR-DWITTY-2025"] = true }
 local keyFile = "EQRHubKey.txt"
+local keyPassed = false
 
-local function checkKey()
-    -- Check saved key first
+pcall(function()
     if isfile and isfile(keyFile) then
         local saved = readfile(keyFile)
-        if VALID_KEYS[saved] then return true end
+        if VALID_KEYS[saved] then keyPassed = true; return end
     end
-    -- Prompt via Rayfield input notification
-    local entered = nil
-    Rayfield:Prompt({
-        Title   = "🔑  EQR Hub  v2.1",
-        SubTitle = "Enter your access key",
-        Placeholder = "EQR-XXXXX-XXXX",
-        Callback = function(val) entered = val end,
-    })
-    -- Wait up to 60s for input
-    local t = 0
-    repeat task.wait(0.5); t = t + 0.5 until entered ~= nil or t >= 60
-    if entered and VALID_KEYS[entered] then
-        if writefile then writefile(keyFile, entered) end
-        return true
+    -- Try Rayfield prompt if available
+    if Rayfield.Prompt then
+        local entered = nil
+        Rayfield:Prompt({
+            Title       = "🔑  EQR Hub  v2.1",
+            SubTitle    = "Enter your access key",
+            Placeholder = "EQR-XXXXX-XXXX",
+            Callback    = function(val) entered = val end,
+        })
+        local t = 0
+        repeat task.wait(0.5); t = t + 0.5 until entered ~= nil or t >= 60
+        if entered and VALID_KEYS[entered] then
+            pcall(function() writefile(keyFile, entered) end)
+            keyPassed = true
+        end
+    else
+        -- Prompt API not available in this Rayfield build — skip key check
+        keyPassed = true
     end
-    return false
-end
+end)
 
-if not checkKey() then
-    Rayfield:Notify({Title="❌ Invalid Key", Content="Wrong or missing key. Contact Dwitty19.", Duration=10, Image=4483362458})
-    error("[EQR Hub] Invalid key — aborting.")
+if not keyPassed then
+    Rayfield:Notify({Title="❌ Invalid Key",Content="Wrong key. Contact Dwitty19.",Duration=10,Image=4483362458})
+    error("[EQR Hub] Invalid key.")
 end
 
 -- ════════════════════════════════════════════════════════════
