@@ -1566,19 +1566,16 @@ local Window = Rayfield:CreateWindow({
     LoadingTitle    = "EQR Hub  v2.1",
     LoadingSubtitle = "Criminality  •  Built for Dwitty19",
     ConfigurationSaving = { Enabled=true, FolderName="EQRHub", FileName="config" },
-    KeySystem = {
-        Enabled   = true,
-        Title     = "EQR Hub  v2.1",
-        Subtitle  = "Enter your access key",
-        Note      = "Contact Dwitty19 for a key.",
-        FileName  = "EQRHubKey",   -- saves key locally so you only type it once
-        SaveKey   = true,
+    KeySystem = true,
+    KeySettings = {
+        Title    = "EQR Hub  v2.1",
+        Subtitle = "Enter your access key",
+        Note     = "Contact Dwitty19 for a key.",
+        FileName = "EQRHubKey",
+        SaveKey  = true,
         GrabKeyFromSite = false,
-        Key       = {
-            "EQR-DWITTY-2025",    -- primary key — change or delete this
-            -- add more keys here as extra lines, e.g.:
-            -- "EQR-FRIEND-0001",
-            -- "EQR-FRIEND-0002",
+        Key      = {
+            "EQR-DWITTY-2025",
         },
     },
 })
