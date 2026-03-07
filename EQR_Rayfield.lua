@@ -1535,12 +1535,13 @@ end)
 --  R A Y F I E L D
 -- ════════════════════════════════════════════════════════════
 -- ════════════════════════════════════════════════════════════
---  R A Y F I E L D  (with fallback if primary CDN is down)
+--  R A Y F I E L D  (self-hosted first, then CDN fallbacks)
 -- ════════════════════════════════════════════════════════════
 local Rayfield
 local rayfieldURLs = {
-    "https://sirius.menu/rayfield",
-    "https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua",
+    "https://raw.githubusercontent.com/dwitty19/EQRHub-/main/rayfield.lua",  -- self-hosted (most reliable)
+    "https://raw.githubusercontent.com/SiriusSoftwareLtd/Rayfield/main/source.lua", -- official GitHub
+    "https://sirius.menu/rayfield",  -- official CDN (sometimes down)
 }
 for _, url in ipairs(rayfieldURLs) do
     local ok, result = pcall(function()
@@ -1549,7 +1550,7 @@ for _, url in ipairs(rayfieldURLs) do
     if ok and result then Rayfield = result; break end
     task.wait(1)
 end
-assert(Rayfield, "[EQR Hub] Failed to load Rayfield UI from all sources. Check your internet / executor HTTP permissions.")
+assert(Rayfield, "[EQR Hub] Failed to load Rayfield UI. Make sure rayfield.lua is uploaded to your GitHub repo.")
 
 local Window = Rayfield:CreateWindow({
     Name            = "EQR Hub  |  v2.1",
