@@ -1569,40 +1569,125 @@ local Window = Rayfield:CreateWindow({
     KeySystem = false,  -- key check handled below
 })
 
--- ── Key check (best-effort — won't block load if prompt API unavailable) ──
+-- ════════════════════════════════════════════════════════════
+--  KEY SYSTEM  (custom ScreenGui — works in all executors)
+-- ════════════════════════════════════════════════════════════
 local VALID_KEYS = { ["EQR-DWITTY-2025"] = true }
-local keyFile = "EQRHubKey.txt"
-local keyPassed = false
+local KEY_FILE   = "EQRHubKey.txt"
 
-pcall(function()
-    if isfile and isfile(keyFile) then
-        local saved = readfile(keyFile)
-        if VALID_KEYS[saved] then keyPassed = true; return end
+local function runKeySystem()
+    -- Check saved key first — skip prompt if already verified
+    if isfile and isfile(KEY_FILE) then
+        local saved = readfile(KEY_FILE)
+        if VALID_KEYS[saved] then return true end
     end
-    -- Try Rayfield prompt if available
-    if Rayfield.Prompt then
-        local entered = nil
-        Rayfield:Prompt({
-            Title       = "🔑  EQR Hub  v2.1",
-            SubTitle    = "Enter your access key",
-            Placeholder = "EQR-XXXXX-XXXX",
-            Callback    = function(val) entered = val end,
-        })
-        local t = 0
-        repeat task.wait(0.5); t = t + 0.5 until entered ~= nil or t >= 60
-        if entered and VALID_KEYS[entered] then
-            pcall(function() writefile(keyFile, entered) end)
-            keyPassed = true
+
+    -- Build key prompt GUI
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "EQR_KeyPrompt"
+    sg.ResetOnSpawn = false
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    sg.DisplayOrder = 999
+    pcall(function() sg.Parent = game:GetService("CoreGui") end)
+    if not sg.Parent then sg.Parent = PlayerGui end
+
+    -- Backdrop
+    local backdrop = Instance.new("Frame", sg)
+    backdrop.Size = UDim2.new(1,0,1,0)
+    backdrop.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    backdrop.BackgroundTransparency = 0.4
+    backdrop.BorderSizePixel = 0
+
+    -- Card
+    local card = Instance.new("Frame", sg)
+    card.Size = UDim2.new(0,380,0,220)
+    card.Position = UDim2.new(0.5,-190,0.5,-110)
+    card.BackgroundColor3 = Color3.fromRGB(15,15,20)
+    card.BorderSizePixel = 0
+    Instance.new("UICorner", card).CornerRadius = UDim.new(0,10)
+
+    -- Title
+    local title = Instance.new("TextLabel", card)
+    title.Size = UDim2.new(1,0,0,40)
+    title.Position = UDim2.new(0,0,0,10)
+    title.BackgroundTransparency = 1
+    title.Text = "🔑  EQR Hub  v2.1"
+    title.TextColor3 = Color3.fromRGB(255,255,255)
+    title.TextSize = 20
+    title.Font = Enum.Font.GothamBold
+
+    -- Subtitle
+    local sub = Instance.new("TextLabel", card)
+    sub.Size = UDim2.new(1,0,0,24)
+    sub.Position = UDim2.new(0,0,0,48)
+    sub.BackgroundTransparency = 1
+    sub.Text = "Built for Dwitty19  •  Enter your access key"
+    sub.TextColor3 = Color3.fromRGB(160,160,160)
+    sub.TextSize = 13
+    sub.Font = Enum.Font.Gotham
+
+    -- Input box
+    local box = Instance.new("TextBox", card)
+    box.Size = UDim2.new(0,320,0,40)
+    box.Position = UDim2.new(0.5,-160,0,90)
+    box.BackgroundColor3 = Color3.fromRGB(30,30,40)
+    box.BorderSizePixel = 0
+    box.PlaceholderText = "Enter key here..."
+    box.PlaceholderColor3 = Color3.fromRGB(100,100,100)
+    box.Text = ""
+    box.TextColor3 = Color3.fromRGB(255,255,255)
+    box.TextSize = 14
+    box.Font = Enum.Font.Gotham
+    box.ClearTextOnFocus = false
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0,6)
+
+    -- Submit button
+    local btn = Instance.new("TextButton", card)
+    btn.Size = UDim2.new(0,320,0,40)
+    btn.Position = UDim2.new(0.5,-160,0,145)
+    btn.BackgroundColor3 = Color3.fromRGB(50,180,80)
+    btn.BorderSizePixel = 0
+    btn.Text = "Submit Key"
+    btn.TextColor3 = Color3.fromRGB(255,255,255)
+    btn.TextSize = 15
+    btn.Font = Enum.Font.GothamBold
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0,6)
+
+    -- Status label
+    local status = Instance.new("TextLabel", card)
+    status.Size = UDim2.new(1,0,0,20)
+    status.Position = UDim2.new(0,0,0,192)
+    status.BackgroundTransparency = 1
+    status.Text = ""
+    status.TextColor3 = Color3.fromRGB(255,80,80)
+    status.TextSize = 12
+    status.Font = Enum.Font.Gotham
+
+    -- Wait for result
+    local result = nil
+    btn.MouseButton1Click:Connect(function()
+        local k = box.Text:gsub("%s","")
+        if VALID_KEYS[k] then
+            pcall(function() writefile(KEY_FILE, k) end)
+            result = true
+        else
+            status.Text = "❌  Invalid key — try again"
+            box.Text = ""
         end
-    else
-        -- Prompt API not available in this Rayfield build — skip key check
-        keyPassed = true
-    end
-end)
+    end)
+    -- Also submit on Enter
+    box.FocusLost:Connect(function(enter)
+        if enter then btn.MouseButton1Click:Fire() end
+    end)
 
-if not keyPassed then
-    Rayfield:Notify({Title="❌ Invalid Key",Content="Wrong key. Contact Dwitty19.",Duration=10,Image=4483362458})
-    error("[EQR Hub] Invalid key.")
+    local t = 0
+    repeat task.wait(0.2); t = t + 0.2 until result == true or t >= 120
+    sg:Destroy()
+    return result == true
+end
+
+if not runKeySystem() then
+    error("[EQR Hub] Key not entered or invalid — aborting.")
 end
 
 -- ════════════════════════════════════════════════════════════
