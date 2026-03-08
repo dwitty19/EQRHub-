@@ -2189,17 +2189,24 @@ local rayfieldURLs = {
 }
 for i, url in ipairs(rayfieldURLs) do
     print("[EQR] Trying Rayfield source " .. i .. ": " .. url)
-    local ok, result = pcall(function()
-        local src = game:HttpGet(url, true)
-        print("[EQR] HttpGet OK, src length: " .. #src)
-        return loadstring(src)()
-    end)
-    if ok and result then
+    local fetchOk, src = pcall(function() return game:HttpGet(url, true) end)
+    if not fetchOk or type(src) ~= "string" or #src < 200 then
+        print("[EQR] Source " .. i .. " fetch failed or too short")
+        task.wait(1); continue
+    end
+    print("[EQR] HttpGet OK, src length: " .. #src)
+    local fn, compileErr = loadstring(src)
+    if not fn then
+        print("[EQR] Source " .. i .. " compile error: " .. tostring(compileErr))
+        task.wait(1); continue
+    end
+    local runOk, result = pcall(fn)
+    if runOk and result then
         print("[EQR] Rayfield loaded from source " .. i)
         Rayfield = result
         break
     else
-        print("[EQR] Source " .. i .. " failed: " .. tostring(result))
+        print("[EQR] Source " .. i .. " runtime error: " .. tostring(result))
         task.wait(1)
     end
 end
