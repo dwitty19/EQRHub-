@@ -1358,9 +1358,10 @@ local function PanicAll()
     pcall(Fly_Disable); pcall(Noclip_Disable); pcall(FullBright_Disable); pcall(Fov_Disable)
     pcall(WalkSpeed_Disable); pcall(JumpPower_Disable)
     pcall(MeleeAura_Disable); pcall(Aimbot_Disable); pcall(NoRecoil_Disable); pcall(Ragebot_Disable); pcall(LevelFarm_Disable)
-    pcall(ESP_Disable); pcall(Invis_Disable); pcall(BredMakurz_Disable)
+    pcall(ESP_Disable); pcall(Invis_Disable); pcall(BredMakurz_Disable); pcall(BountyESP_Disable)
     pcall(NoFailLockpick_Disable); pcall(OpenNearbyDoors_Disable); pcall(UnlockNearbyDoors_Disable)
     pcall(AdminCheck_Disable); pcall(Collector_Deactivate); pcall(InfiniteStamina_Disable)
+    pcall(AutoAllowance_Disable); pcall(CopDetector_Disable); pcall(AntiCuff_Disable); pcall(BountyHunter_Disable)
     pcall(function() _G.DeactivateShadow() end)
     if autofarmEnabled then autofarmEnabled=false; pcall(function() _G.DeactivateShadow() end); pcall(Collector_Deactivate) end
     FarmStats.LastAction="⚠ PANIC — all features killed"
@@ -1376,6 +1377,487 @@ UserInputService.InputBegan:Connect(function(inp,gpe)
         end)
     end
 end)
+
+-- ════════════════════════════════════════════════════════════
+--  BOUNTY HELPER  (reads bounty from any leaderstats layout)
+-- ════════════════════════════════════════════════════════════
+local function getPlayerBounty(pl)
+    if not pl then return 0 end
+    local ls = pl:FindFirstChild("leaderstats")
+    if ls then
+        for _, name in ipairs({"Bounty","Wanted","WantedLevel","Reward","Warrant"}) do
+            local v = ls:FindFirstChild(name)
+            if v and typeof(v.Value)=="number" then return v.Value end
+        end
+    end
+    local pd = pl:FindFirstChild("PlayerData")
+    if pd then
+        local v = pd:FindFirstChild("Bounty") or pd:FindFirstChild("Wanted")
+        if v and typeof(v.Value)=="number" then return v.Value end
+    end
+    return 0
+end
+
+local function getPlayerLevel(pl)
+    if not pl then return 0 end
+    local ls = pl:FindFirstChild("leaderstats")
+    if ls then
+        for _, name in ipairs({"Level","Lvl","XP","EXP","Rank"}) do
+            local v = ls:FindFirstChild(name)
+            if v and typeof(v.Value)=="number" then return v.Value end
+        end
+    end
+    return 0
+end
+
+-- ════════════════════════════════════════════════════════════
+--  BOUNTY TRACKER ESP
+-- ════════════════════════════════════════════════════════════
+local BountyESP_Enabled = false
+local BountyESP_Conn    = nil
+local _bountyESP_last   = 0
+
+local function applyBountyESP()
+    local myChar = LocalPlayer.Character
+    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl == LocalPlayer then continue end
+        local char = pl.Character
+        local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if not (char and hrp and hum) then continue end
+
+        local dist    = (myHRP.Position - hrp.Position).Magnitude
+        local bounty  = getPlayerBounty(pl)
+        local level   = getPlayerLevel(pl)
+        local existing = char:FindFirstChild("EQR_BountyESP")
+
+        if dist <= 300 then
+            if not existing then
+                local bg = Instance.new("BillboardGui", char)
+                bg.Name = "EQR_BountyESP"
+                bg.AlwaysOnTop = true
+                bg.Size = UDim2.new(8, 0, 3, 0)
+                bg.StudsOffset = Vector3.new(0, 3.5, 0)
+                bg.MaxDistance = 300
+                bg.Adornee = hrp
+
+                local frame = Instance.new("Frame", bg)
+                frame.Size = UDim2.new(1,0,1,0)
+                frame.BackgroundColor3 = Color3.fromRGB(8,8,12)
+                frame.BackgroundTransparency = 0.25
+                frame.BorderSizePixel = 0
+                Instance.new("UICorner", frame).CornerRadius = UDim.new(0,6)
+
+                local nameLbl = Instance.new("TextLabel", frame)
+                nameLbl.Name = "NameLbl"
+                nameLbl.Size = UDim2.new(1,0,0.5,0)
+                nameLbl.BackgroundTransparency = 1
+                nameLbl.TextColor3 = Color3.fromRGB(255,255,255)
+                nameLbl.TextSize = 13
+                nameLbl.Font = Enum.Font.GothamBold
+                nameLbl.Text = pl.Name
+
+                local infoLbl = Instance.new("TextLabel", frame)
+                infoLbl.Name = "InfoLbl"
+                infoLbl.Size = UDim2.new(1,0,0.5,0)
+                infoLbl.Position = UDim2.new(0,0,0.5,0)
+                infoLbl.BackgroundTransparency = 1
+                infoLbl.TextSize = 11
+                infoLbl.Font = Enum.Font.Gotham
+
+                -- self-cleaning distance updater
+                local bConn
+                bConn = RunService.Heartbeat:Connect(function()
+                    if not BountyESP_Enabled or not bg or not bg.Parent then
+                        bConn:Disconnect(); return
+                    end
+                    local c2 = pl.Character
+                    local h2 = c2 and c2:FindFirstChild("HumanoidRootPart")
+                    local m2 = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if not (h2 and m2) then return end
+                    local d2      = (m2.Position - h2.Position).Magnitude
+                    local b2      = getPlayerBounty(pl)
+                    local l2      = getPlayerLevel(pl)
+                    local hum2    = c2 and c2:FindFirstChildOfClass("Humanoid")
+                    local health2 = hum2 and math.floor(hum2.Health) or 0
+
+                    -- Colour by bounty
+                    if b2 >= 5000 then
+                        infoLbl.TextColor3 = Color3.fromRGB(255, 60, 60)
+                    elseif b2 >= 1000 then
+                        infoLbl.TextColor3 = Color3.fromRGB(255, 200, 0)
+                    else
+                        infoLbl.TextColor3 = Color3.fromRGB(100, 220, 100)
+                    end
+
+                    infoLbl.Text = string.format("💰$%d  |  Lv%d  |  ❤%d  |  %.0fst", b2, l2, health2, d2)
+                end)
+                bg.Destroying:Connect(function() bConn:Disconnect() end)
+            end
+        elseif existing then
+            existing:Destroy()
+        end
+    end
+end
+
+local function BountyESP_Enable()
+    if BountyESP_Enabled then return end
+    BountyESP_Enabled = true
+    applyBountyESP()
+    BountyESP_Conn = RunService.Heartbeat:Connect(function()
+        if not BountyESP_Enabled then return end
+        if (tick() - _bountyESP_last) >= 1.5 then
+            _bountyESP_last = tick()
+            applyBountyESP()
+        end
+    end)
+end
+
+local function BountyESP_Disable()
+    if not BountyESP_Enabled then return end
+    BountyESP_Enabled = false
+    if BountyESP_Conn then BountyESP_Conn:Disconnect(); BountyESP_Conn = nil end
+    for _, pl in ipairs(Players:GetPlayers()) do
+        local char = pl.Character
+        if char then
+            local eg = char:FindFirstChild("EQR_BountyESP")
+            if eg then eg:Destroy() end
+        end
+    end
+end
+
+-- ════════════════════════════════════════════════════════════
+--  SERVER SCANNER
+-- ════════════════════════════════════════════════════════════
+local ServerScan_Para = nil  -- set after UI is built, ref stored here
+
+local function runServerScan()
+    local plist     = Players:GetPlayers()
+    local count     = #plist
+    local totalLvl  = 0
+    local topBounty = 0
+    local topBountyName = "none"
+    local topLevel  = 0
+    local topLevelName = "none"
+    local cops      = 0
+
+    for _, pl in ipairs(plist) do
+        local lvl = getPlayerLevel(pl)
+        local bty = getPlayerBounty(pl)
+        totalLvl = totalLvl + lvl
+        if lvl > topLevel then topLevel = lvl; topLevelName = pl.Name end
+        if bty > topBounty then topBounty = bty; topBountyName = pl.Name end
+        -- rough cop check: low bounty + high level = likely a cop/enforcer
+        if lvl >= 20 and bty == 0 then cops = cops + 1 end
+    end
+
+    local avgLvl   = count > 0 and math.floor(totalLvl / count) or 0
+    local payoutTip = count >= 15 and "💰 HIGH payout (15+ players)"
+                   or count >= 8  and "📈 Medium payout"
+                   or              "📉 Low payout — consider hopping"
+
+    local threatStr = cops >= 3 and "⚠️ HIGH — "..cops.." possible cops"
+                   or cops >= 1  and "⚡ Medium — "..cops.." possible cop(s)"
+                   or              "✅ Low — no obvious cops"
+
+    return string.format(
+        "👥 Players:        %d / ~30\n"
+     .. "📊 Avg Level:     %d\n"
+     .. "🏆 Top Level:    %s  (Lv%d)\n"
+     .. "💰 Top Bounty:  %s  ($%d)\n"
+     .. "🚔 Threat Level: %s\n"
+     .. "💵 Payout:         %s\n"
+     .. "📡 Ping:            %dms",
+        count, avgLvl,
+        topLevelName, topLevel,
+        topBountyName, topBounty,
+        threatStr, payoutTip,
+        math.floor(LocalPlayer:GetNetworkPing() * 1000)
+    )
+end
+
+-- ════════════════════════════════════════════════════════════
+--  AUTO-ALLOWANCE  (Casual XP — collect every 15 min)
+-- ════════════════════════════════════════════════════════════
+local AutoAllowance_Enabled   = false
+local AutoAllowance_NextTime  = 0   -- os.time() of next collection
+local ALLOWANCE_INTERVAL      = 15 * 60  -- 15 minutes
+
+local function doCollectAllowance()
+    local atm = findNearestATM()
+    if not atm then return false end
+    local char = LocalPlayer.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return false end
+    hrp.CFrame = CFrame.new(atm.Position + Vector3.new(0, 3, 3))
+    task.wait(0.8)
+    local evFolder = ReplicatedStorage:FindFirstChild("Events")
+    if evFolder then
+        for _, name in ipairs({"Allowance","CollectAllowance","ATMAllowance","GetAllowance","ALLWNC","ATMEvent","ATMR"}) do
+            local rem = evFolder:FindFirstChild(name)
+            if rem then
+                pcall(function() rem:FireServer("allowance") end)
+                task.wait(0.2)
+                pcall(function() rem:InvokeServer("allowance") end)
+                task.wait(0.2)
+            end
+        end
+    end
+    -- Also scan ATM model itself
+    if atm.Parent then
+        for _, obj in ipairs(atm.Parent:GetDescendants()) do
+            if (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) then
+                local n = obj.Name:lower()
+                if n:find("allow") or n:find("bonus") or n:find("wage") then
+                    pcall(function() obj:FireServer() end)
+                    pcall(function() obj:InvokeServer() end)
+                end
+            end
+        end
+    end
+    FarmStats.LastAction = "🎁 Allowance collected!"
+    AutoAllowance_NextTime = os.time() + ALLOWANCE_INTERVAL
+    return true
+end
+
+task.spawn(function()
+    while task.wait(5) do
+        if not AutoAllowance_Enabled then continue end
+        if os.time() >= AutoAllowance_NextTime then
+            FarmStats.LastAction = "🎁 Collecting allowance..."
+            pcall(doCollectAllowance)
+            pcall(function()
+                Rayfield:Notify({
+                    Title   = "🎁 Allowance Collected!",
+                    Content = "XP added. Next collection in 15 minutes.",
+                    Duration = 6, Image = 4483362458,
+                })
+            end)
+        end
+    end
+end)
+
+local function AutoAllowance_Enable()
+    AutoAllowance_Enabled = true
+    -- First collection immediately if enough time has passed
+    if os.time() >= AutoAllowance_NextTime then
+        AutoAllowance_NextTime = 0
+    end
+end
+
+local function AutoAllowance_Disable()
+    AutoAllowance_Enabled = false
+end
+
+local function allowanceCountdown()
+    local rem = AutoAllowance_NextTime - os.time()
+    if rem <= 0 then return "Ready now!" end
+    local m = math.floor(rem / 60)
+    local s = rem % 60
+    return string.format("%dm %ds", m, s)
+end
+
+-- ════════════════════════════════════════════════════════════
+--  COP DETECTOR
+-- ════════════════════════════════════════════════════════════
+local CopDetector_Enabled = false
+local CopDetector_Range   = 60    -- studs
+local _lastCopAlert       = 0
+local _lastCopCount       = 0
+
+task.spawn(function()
+    while task.wait(2) do
+        if not CopDetector_Enabled then continue end
+        local myChar = LocalPlayer.Character
+        local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+        if not myHRP then continue end
+
+        local copsNear = 0
+        local nearestCopName = ""
+        local nearestCopDist = math.huge
+
+        for _, pl in ipairs(Players:GetPlayers()) do
+            if pl == LocalPlayer then continue end
+            local char = pl.Character
+            local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+            if not hrp then continue end
+            local dist  = (myHRP.Position - hrp.Position).Magnitude
+            if dist > CopDetector_Range then continue end
+
+            -- Cop heuristic: check team name, leaderstats role, or low bounty high level
+            local isCop = false
+            if pl.Team and (pl.Team.Name:lower():find("cop") or pl.Team.Name:lower():find("police") or pl.Team.Name:lower():find("law")) then
+                isCop = true
+            end
+            local ls = pl:FindFirstChild("leaderstats")
+            if ls then
+                local role = ls:FindFirstChild("Role") or ls:FindFirstChild("Class") or ls:FindFirstChild("Team")
+                if role and typeof(role.Value)=="string" and (role.Value:lower():find("cop") or role.Value:lower():find("police") or role.Value:lower():find("officer")) then
+                    isCop = true
+                end
+            end
+            -- Fallback: high level, zero bounty, alive = suspicious
+            if getPlayerLevel(pl) >= 15 and getPlayerBounty(pl) == 0 then
+                isCop = true
+            end
+
+            if isCop then
+                copsNear = copsNear + 1
+                if dist < nearestCopDist then nearestCopDist = dist; nearestCopName = pl.Name end
+            end
+        end
+
+        -- Only notify if cop count changed or enough time has passed
+        if copsNear > 0 and (copsNear ~= _lastCopCount or (tick() - _lastCopAlert) > 15) then
+            _lastCopAlert = tick()
+            _lastCopCount = copsNear
+            FarmStats.LastAction = string.format("🚔 COP NEARBY — %s (%.0fst)", nearestCopName, nearestCopDist)
+            pcall(function()
+                Rayfield:Notify({
+                    Title   = "🚔 Cop Nearby!",
+                    Content = string.format("%s is %.0f studs away — be careful!", nearestCopName, nearestCopDist),
+                    Duration = 6, Image = 4483362458,
+                })
+            end)
+        elseif copsNear == 0 then
+            _lastCopCount = 0
+        end
+    end
+end)
+
+local function CopDetector_Enable()  CopDetector_Enabled = true  end
+local function CopDetector_Disable() CopDetector_Enabled = false; _lastCopCount = 0 end
+
+-- ════════════════════════════════════════════════════════════
+--  ANTI-CUFF
+-- ════════════════════════════════════════════════════════════
+local AntiCuff_Enabled = false
+
+local function tryEscapeCuff()
+    local char = LocalPlayer.Character
+    local hrp  = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+    -- Teleport away from current position instantly
+    hrp.CFrame = hrp.CFrame + Vector3.new(math.random(-20,20), 5, math.random(-20,20))
+    -- Try firing known uncuff/escape remotes
+    local evF = ReplicatedStorage:FindFirstChild("Events")
+    if evF then
+        for _, name in ipairs({"Uncuff","UnCuff","EscapeCuff","Escape","BreakFree","UNCFF","RemoveCuffs"}) do
+            local rem = evF:FindFirstChild(name)
+            if rem then
+                pcall(function() rem:FireServer() end)
+                pcall(function() rem:InvokeServer() end)
+            end
+        end
+    end
+    FarmStats.LastAction = "🔓 Anti-Cuff triggered — escaped!"
+end
+
+-- Watch for arrest GUI appearing in PlayerGui
+local function hookAntiCuff(gui)
+    gui.ChildAdded:Connect(function(item)
+        if not AntiCuff_Enabled then return end
+        local n = item.Name:lower()
+        if n:find("cuff") or n:find("arrest") or n:find("handcuff") or n:find("detain") or n:find("jail") then
+            task.wait(0.1)
+            pcall(tryEscapeCuff)
+            task.wait(0.3)
+            pcall(tryEscapeCuff)
+        end
+    end)
+end
+
+-- Watch for character attributes / values that signal arrest
+local function hookAntiCuffChar(char)
+    char.ChildAdded:Connect(function(item)
+        if not AntiCuff_Enabled then return end
+        local n = item.Name:lower()
+        if n:find("cuff") or n:find("arrest") or n:find("handcuff") then
+            task.wait(0.1); pcall(tryEscapeCuff)
+        end
+    end)
+    char.AttributeChanged:Connect(function(attr)
+        if not AntiCuff_Enabled then return end
+        local n = attr:lower()
+        if (n:find("cuff") or n:find("arrest")) and char:GetAttribute(attr) == true then
+            task.wait(0.1); pcall(tryEscapeCuff)
+        end
+    end)
+end
+
+hookAntiCuff(PlayerGui)
+if LocalPlayer.Character then task.spawn(hookAntiCuffChar, LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(function(c) task.spawn(hookAntiCuffChar, c) end)
+
+local function AntiCuff_Enable()  AntiCuff_Enabled = true  end
+local function AntiCuff_Disable() AntiCuff_Enabled = false end
+
+-- ════════════════════════════════════════════════════════════
+--  AUTO BOUNTY HUNTER
+--  Like level farm but always targets highest-bounty player
+-- ════════════════════════════════════════════════════════════
+local BountyHunter_Enabled = false
+local BountyHunter_Kills   = 0
+local BountyHunter_Earned  = 0
+local BountyHunter_MinBounty = 500  -- only hunt players with at least this bounty
+
+local function bh_getTarget()
+    local myChar = LocalPlayer.Character
+    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+    local best, bestBounty = nil, BountyHunter_MinBounty - 1
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl == LocalPlayer then continue end
+        local c   = pl.Character
+        local hrp = c and c:FindFirstChild("HumanoidRootPart")
+        local hum = c and c:FindFirstChildOfClass("Humanoid")
+        if not (hrp and hum and hum.Health > 0) then continue end
+        if c:FindFirstChildOfClass("ForceField") then continue end
+        local b = getPlayerBounty(pl)
+        if b > bestBounty then bestBounty = b; best = pl end
+    end
+    return best, bestBounty
+end
+
+task.spawn(function()
+    while task.wait(0.3) do
+        if not BountyHunter_Enabled then continue end
+        local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not hum or hum.Health <= 0 then task.wait(1); continue end
+
+        local target, bounty = bh_getTarget()
+        if target then
+            FarmStats.LastAction = string.format("🎯 Hunting %s ($%d bounty)", target.Name, bounty)
+            -- Use melee kill (same as level farm)
+            lvlMeleeKill(target)
+            local tChar = target.Character
+            local tHum  = tChar and tChar:FindFirstChildOfClass("Humanoid")
+            if not tChar or (tHum and tHum.Health <= 0) then
+                BountyHunter_Kills  = BountyHunter_Kills + 1
+                BountyHunter_Earned = BountyHunter_Earned + bounty
+                FarmStats.LastAction = string.format("🎯 Bounty collected! $%d (#%d kill)", bounty, BountyHunter_Kills)
+                pcall(function()
+                    Rayfield:Notify({
+                        Title   = "🎯 Bounty Collected!",
+                        Content = string.format("Killed %s for $%d bounty.", target.Name, bounty),
+                        Duration = 4, Image = 4483362458,
+                    })
+                end)
+            end
+            task.wait(1)
+        else
+            FarmStats.LastAction = string.format("🎯 Bounty Hunter — no targets above $%d", BountyHunter_MinBounty)
+            task.wait(3)
+        end
+    end
+end)
+
+local function BountyHunter_Enable()  BountyHunter_Enabled = true  end
+local function BountyHunter_Disable() BountyHunter_Enabled = false end
 
 -- ════════════════════════════════════════════════════════════
 --  AUTOFARM HELPERS
@@ -2018,6 +2500,14 @@ VisTab:CreateToggle({ Name="Player ESP  (wallhack)", CurrentValue=false, Flag="P
 VisTab:CreateToggle({ Name="Safe / Register ESP  (✓/✗ labels + distance)", CurrentValue=false, Flag="SafeESP",
     Callback=function(v) if v then BredMakurz_Enable() else BredMakurz_Disable() end end })
 
+VisTab:CreateToggle({ Name="Bounty Tracker ESP  (shows bounty + level + health)", CurrentValue=false, Flag="BountyESP",
+    Callback=function(v)
+        if v then
+            BountyESP_Enable()
+            Rayfield:Notify({Title="💰 Bounty ESP ON",Content="Showing bounty, level and health above every player.",Duration=4,Image=4483362458})
+        else BountyESP_Disable() end
+    end })
+
 VisTab:CreateSection("👻 Stealth")
 
 VisTab:CreateToggle({ Name="Invisibility  (R6 only)", CurrentValue=false, Flag="Invis",
@@ -2102,7 +2592,23 @@ FarmTab:CreateToggle({ Name="Auto Server-Hop  (when map is fully depleted)", Cur
         if v then Rayfield:Notify({Title="🔀 Auto-Hop ON",Content="Will hop to fresh server when all safes are broken.",Duration=5,Image=4483362458}) end
     end })
 
-FarmTab:CreateSection("ℹ️  Loot Reference  (Criminality Wiki averages)")
+FarmTab:CreateSection("🎁 Casual XP — Auto-Allowance")
+
+FarmTab:CreateToggle({ Name="Auto-Allowance  (Casual mode XP every 15 min)", CurrentValue=false, Flag="AutoAllowance",
+    Callback=function(v)
+        if v then
+            AutoAllowance_Enable()
+            Rayfield:Notify({Title="🎁 Auto-Allowance ON",Content="Will collect your ATM allowance every 15 minutes for XP.\nCasual mode only.",Duration=6,Image=4483362458})
+        else AutoAllowance_Disable() end
+    end })
+
+FarmTab:CreateParagraph({
+    Title   = "ℹ️  Casual vs Standard XP",
+    Content = "🎁 Casual mode:  XP only from ATM allowance (every 15 min)\n"
+           .. "⚔️ Standard mode: XP from kills, looting, and cracking safes\n"
+           .. "🏆 Brawl mode:    XP purely from kills — best for level farming\n\n"
+           .. "Use Auto-Allowance for Casual. Use Level Farm for Standard/Brawl.",
+})
 
 FarmTab:CreateParagraph({
     Content = "🏪 Cash Register:   $80 – $330    avg ~$205\n"
@@ -2127,6 +2633,54 @@ MiscTab:CreateToggle({ Name="Staff Detector  (auto-kick on join)", CurrentValue=
             Rayfield:Notify({Title="🛡 Staff Detector ON",Content="Scanning current players now...",Duration=4,Image=4483362458})
         else AdminCheck_Disable() end
     end })
+
+MiscTab:CreateToggle({ Name="🚔 Cop Detector  (alerts when cop is nearby)", CurrentValue=false, Flag="CopDet",
+    Callback=function(v)
+        if v then
+            CopDetector_Enable()
+            Rayfield:Notify({Title="🚔 Cop Detector ON",Content="Will notify when a cop is within range.",Duration=4,Image=4483362458})
+        else CopDetector_Disable() end
+    end })
+
+MiscTab:CreateSlider({ Name="Cop Alert Range", Range={20,150}, Increment=5, Suffix=" st", CurrentValue=60, Flag="CopRange",
+    Callback=function(v) CopDetector_Range=v end })
+
+MiscTab:CreateToggle({ Name="🔓 Anti-Cuff  (auto-escape arrest)", CurrentValue=false, Flag="AntiCuff",
+    Callback=function(v)
+        if v then
+            AntiCuff_Enable()
+            Rayfield:Notify({Title="🔓 Anti-Cuff ON",Content="Will teleport away + fire escape remote if arrest is detected.",Duration=5,Image=4483362458})
+        else AntiCuff_Disable() end
+    end })
+
+MiscTab:CreateSection("🔍 Server Scanner")
+
+local scanPara = MiscTab:CreateParagraph({ Title="Server Info", Content="Press Scan to analyse this server." })
+
+MiscTab:CreateButton({ Name="🔍  Scan This Server",
+    Callback=function()
+        local result = pcall(function()
+            local info = runServerScan()
+            scanPara:Set({ Title="📊 Server Scan Results", Content=info })
+        end)
+        Rayfield:Notify({Title="🔍 Scan Complete",Content="Server info updated below.",Duration=3,Image=4483362458})
+    end })
+
+MiscTab:CreateSection("🎯 Bounty Hunter")
+
+MiscTab:CreateToggle({ Name="Auto Bounty Hunter  (hunts highest bounty player)", CurrentValue=false, Flag="BountyHunter",
+    Callback=function(v)
+        if v then
+            BountyHunter_Enable()
+            Rayfield:Notify({Title="🎯 Bounty Hunter ON",Content=string.format("Hunting players with $%d+ bounty.", BountyHunter_MinBounty),Duration=5,Image=4483362458})
+        else
+            BountyHunter_Disable()
+            Rayfield:Notify({Title="🎯 Bounty Hunter OFF",Content=string.format("Stopped. Kills: %d  |  Earned: $%d", BountyHunter_Kills, BountyHunter_Earned),Duration=5,Image=4483362458})
+        end
+    end })
+
+MiscTab:CreateSlider({ Name="Min Bounty to Hunt", Range={100,10000}, Increment=100, Suffix="$", CurrentValue=500, Flag="BountyMin",
+    Callback=function(v) BountyHunter_MinBounty=v end })
 
 MiscTab:CreateSection("🔓 Lockpick & Doors")
 
