@@ -879,6 +879,168 @@ local function Ragebot_Disable()
 end
 
 -- ════════════════════════════════════════════════════════════
+--  LEVEL AUTOFARM
+--  Teleports to nearest player, melees them to death, repeats.
+--  Uses same melee remotes as Melee Aura for consistency.
+-- ════════════════════════════════════════════════════════════
+local LevelFarm_Enabled  = false
+local LevelFarm_Kills    = 0
+local LevelFarm_Method   = "Melee"   -- "Melee" | "Gun"
+local LevelFarm_Task     = nil
+
+local function lvlGetTarget()
+    local myChar = LocalPlayer.Character
+    local myHRP  = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+    local best, bestDist = nil, math.huge
+    for _, pl in ipairs(Players:GetPlayers()) do
+        if pl ~= LocalPlayer then
+            local c   = pl.Character
+            local hrp = c and c:FindFirstChild("HumanoidRootPart")
+            local hum = c and c:FindFirstChildOfClass("Humanoid")
+            if hrp and hum and hum.Health > 0 and not c:FindFirstChildOfClass("ForceField") then
+                local d = (myHRP.Position - hrp.Position).Magnitude
+                if d < bestDist then bestDist = d; best = pl end
+            end
+        end
+    end
+    return best
+end
+
+local function lvlMeleeKill(target)
+    local evF = ReplicatedStorage:FindFirstChild("Events"); if not evF then return end
+    local r1  = evF:FindFirstChild("XMHH.2")
+    local r2  = evF:FindFirstChild("XMHH2.2")
+    if not (r1 and r2) then return end
+
+    local myChar = LocalPlayer.Character; if not myChar then return end
+    local myHRP  = myChar:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
+
+    -- Teleport right on top of target
+    local tChar = target.Character; if not tChar then return end
+    local tHRP  = tChar:FindFirstChild("HumanoidRootPart"); if not tHRP then return end
+    myHRP.CFrame = tHRP.CFrame + Vector3.new(0, 0.5, 0)
+    task.wait(0.15)
+
+    -- Hit until dead or target gone (max 12 hits)
+    for _ = 1, 12 do
+        if not LevelFarm_Enabled then return end
+        tChar = target.Character
+        if not tChar then break end
+        local tHum = tChar:FindFirstChildOfClass("Humanoid")
+        if not tHum or tHum.Health <= 0 then break end
+        tHRP = tChar:FindFirstChild("HumanoidRootPart"); if not tHRP then break end
+
+        -- Stay on top of target
+        myHRP.CFrame = tHRP.CFrame + Vector3.new(0, 0.5, 0)
+
+        local tool    = myChar:FindFirstChildOfClass("Tool")
+        local handle  = tool and (tool:FindFirstChild("WeaponHandle") or tool:FindFirstChild("Handle"))
+                        or myChar:FindFirstChild("Right Arm")
+        local head    = tChar:FindFirstChild("Head")
+
+        local a1 = {[1]="🍞",[2]=tick(),[3]=tool,[4]="43TRFWX",[5]="Normal",[6]=tick(),[7]=true}
+        local ok, res = pcall(function() return r1:InvokeServer(unpack(a1)) end)
+        if ok and handle and head then
+            task.wait(0.08 + math.random()*0.04)
+            local a2 = {[1]="🍞",[2]=tick(),[3]=tool,[4]="2389ZFX34",[5]=res,[6]=false,
+                        [7]=handle,[8]=head,[9]=tChar,[10]=myHRP.Position,[11]=head.Position}
+            pcall(function() r2:FireServer(unpack(a2)) end)
+        end
+        task.wait(0.25 + math.random()*0.05)
+    end
+end
+
+local function lvlGunKill(target)
+    if not (GNX_S_Remote and ZFKLF_H_Remote) then return end
+    local myChar = LocalPlayer.Character; if not myChar then return end
+    local myHRP  = myChar:FindFirstChild("HumanoidRootPart"); if not myHRP then return end
+
+    local tChar = target.Character; if not tChar then return end
+    local tHRP  = tChar:FindFirstChild("HumanoidRootPart"); if not tHRP then return end
+
+    -- Teleport close
+    myHRP.CFrame = tHRP.CFrame + Vector3.new(0, 0.5, 3)
+    task.wait(0.15)
+
+    for _ = 1, 20 do
+        if not LevelFarm_Enabled then return end
+        tChar = target.Character; if not tChar then break end
+        local tHum = tChar:FindFirstChildOfClass("Humanoid")
+        if not tHum or tHum.Health <= 0 then break end
+        tHRP = tChar:FindFirstChild("HumanoidRootPart"); if not tHRP then break end
+        local tHead = tChar:FindFirstChild("Head") or tHRP
+
+        myHRP.CFrame = tHRP.CFrame + Vector3.new(0, 0.5, 2)
+        local tool = myChar:FindFirstChildOfClass("Tool"); if not tool then break end
+        local cam  = workspace.CurrentCamera
+        local hp   = tHead.Position
+        local hd   = (hp - cam.CFrame.Position).Unit
+        local rk   = RandStr(30).."0"
+        pcall(function() GNX_S_Remote:FireServer(tick(),rk,tool,"FDS9I83",cam.CFrame.Position,{hd},false) end)
+        pcall(function() ZFKLF_H_Remote:FireServer("🧈",tool,rk,1,tHead,hp,hd,nil,nil) end)
+        task.wait(0.05 + math.random()*0.02)
+    end
+end
+
+local function LevelFarm_Loop()
+    local evF = ReplicatedStorage:FindFirstChild("Events")
+    -- Auto-equip crowbar if using melee and we have one
+    local function tryEquipCrowbar()
+        local char = LocalPlayer.Character; if not char then return end
+        local crowbar = char:FindFirstChild("Crowbar")
+            or (LocalPlayer.Backpack and LocalPlayer.Backpack:FindFirstChild("Crowbar"))
+        if crowbar then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            if hum then pcall(function() hum:EquipTool(crowbar) end) end
+        end
+    end
+
+    while LevelFarm_Enabled do
+        local char = LocalPlayer.Character
+        local hum  = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not hum or hum.Health <= 0 then
+            task.wait(1); continue
+        end
+
+        local target = lvlGetTarget()
+        if target then
+            FarmStats.LastAction = "⚔️ Level farming → " .. target.Name
+            if LevelFarm_Method == "Melee" then
+                tryEquipCrowbar()
+                lvlMeleeKill(target)
+            else
+                lvlGunKill(target)
+            end
+            -- Count kill if target died
+            local tChar = target.Character
+            local tHum  = tChar and tChar:FindFirstChildOfClass("Humanoid")
+            if not tChar or (tHum and tHum.Health <= 0) then
+                LevelFarm_Kills = LevelFarm_Kills + 1
+                FarmStats.LastAction = string.format("⚔️ Kill #%d — %s", LevelFarm_Kills, target.Name)
+            end
+            task.wait(0.5)
+        else
+            FarmStats.LastAction = "⚔️ Level farm — waiting for players..."
+            task.wait(2)
+        end
+    end
+    LevelFarm_Task = nil
+end
+
+local function LevelFarm_Enable()
+    if LevelFarm_Enabled then return end
+    LevelFarm_Enabled = true
+    LevelFarm_Task = task.spawn(LevelFarm_Loop)
+end
+
+local function LevelFarm_Disable()
+    if not LevelFarm_Enabled then return end
+    LevelFarm_Enabled = false
+    LevelFarm_Task = nil
+end
+
+-- ════════════════════════════════════════════════════════════
 --  NO RECOIL
 -- ════════════════════════════════════════════════════════════
 local NoRecoil_Enabled=false; local NoRecoil_Conns={}
@@ -1195,7 +1357,7 @@ local function PanicAll()
     panicActive=true
     pcall(Fly_Disable); pcall(Noclip_Disable); pcall(FullBright_Disable); pcall(Fov_Disable)
     pcall(WalkSpeed_Disable); pcall(JumpPower_Disable)
-    pcall(MeleeAura_Disable); pcall(Aimbot_Disable); pcall(NoRecoil_Disable); pcall(Ragebot_Disable)
+    pcall(MeleeAura_Disable); pcall(Aimbot_Disable); pcall(NoRecoil_Disable); pcall(Ragebot_Disable); pcall(LevelFarm_Disable)
     pcall(ESP_Disable); pcall(Invis_Disable); pcall(BredMakurz_Disable)
     pcall(NoFailLockpick_Disable); pcall(OpenNearbyDoors_Disable); pcall(UnlockNearbyDoors_Disable)
     pcall(AdminCheck_Disable); pcall(Collector_Deactivate); pcall(InfiniteStamina_Disable)
@@ -1772,6 +1934,34 @@ CombatTab:CreateSection("💥 Auto Kill")
 CombatTab:CreateToggle({ Name="Ragebot  (auto shoots closest enemy)", CurrentValue=false, Flag="Ragebot",
     Callback=function(v) if v then Ragebot_Enable() else Ragebot_Disable() end end })
 
+CombatTab:CreateSection("⭐ Level Autofarm")
+
+CombatTab:CreateToggle({ Name="Level Autofarm  (teleport + kill loop)", CurrentValue=false, Flag="LevelFarm",
+    Callback=function(v)
+        if v then
+            LevelFarm_Enable()
+            Rayfield:Notify({Title="⚔️ Level Farm ON",Content="Teleporting to players and killing.\nKill count tracked in 📊 Stats.",Duration=5,Image=4483362458})
+        else
+            LevelFarm_Disable()
+            Rayfield:Notify({Title="⚔️ Level Farm OFF",Content=string.format("Stopped. Total kills this session: %d", LevelFarm_Kills),Duration=4,Image=4483362458})
+        end
+    end })
+
+CombatTab:CreateDropdown({ Name="Kill Method", Options={"Melee","Gun"}, CurrentOption={"Melee"}, Flag="LevelFarmMethod",
+    Callback=function(opt)
+        LevelFarm_Method = opt[1]
+        Rayfield:Notify({Title="⚔️ Method: "..opt[1],Content= opt[1]=="Melee" and "Will equip crowbar and melee targets." or "Will shoot targets with equipped gun.",Duration=3,Image=4483362458})
+    end })
+
+CombatTab:CreateParagraph({
+    Title   = "ℹ️  Level Farm Tips",
+    Content = "• Melee method uses Crowbar — make sure you have one\n"
+           .. "• Gun method uses your equipped weapon — load up first\n"
+           .. "• Works best in high-player servers (more targets)\n"
+           .. "• Disable if a staff member joins — use Staff Detector!\n"
+           .. "• Kill count shows in 📊 Stats → Session Details",
+})
+
 -- ════════════════════════════════════════════════════════════
 --  🏃  MOVEMENT
 -- ════════════════════════════════════════════════════════════
@@ -2112,11 +2302,13 @@ local function refreshStats()
         Content = string.format(
             "🕒 Time:              %s\n"
          .. "🎯 Cracks / hr:      ~%.1f\n"
+         .. "⚔️ Player kills:      %d\n"
          .. "👥 Players in server: %d  (%s payout)\n"
          .. "📡 Ping:               %dms  %s\n"
          .. "🔥 Autofarm:          %s",
             fmtTime(elapsed),
             totalCracks/(elapsed/3600),
+            LevelFarm_Kills,
             serverCount, serverCount >= 15 and "high 💰" or serverCount >= 8 and "medium" or "low",
             pingMs, isPingHigh and "⚠ HIGH" or "✅ OK",
             autofarmEnabled and "🟢 Running" or "🔴 Stopped"),
@@ -2156,7 +2348,7 @@ StatsTab:CreateButton({ Name="🔄  Refresh Now",
 
 StatsTab:CreateButton({ Name="🗑  Reset Session Stats",
     Callback=function()
-        FarmStats_Reset(); pcall(refreshStats)
+        FarmStats_Reset(); LevelFarm_Kills = 0; pcall(refreshStats)
         Rayfield:Notify({Title="🗑 Stats Reset",Content="New session started. Cash baseline updated.",Duration=3,Image=4483362458})
     end })
 
